@@ -10,7 +10,7 @@ extraction tools/methods.
 data/
   sbb/
     raw-tables/     Small selection of Source images of tables from the SBB dataset   
-tasks/               Markdown files with instructions for specific workshop tasks
+tasks/               Instructions and code for specific workshop tasks
 
 ```
 
