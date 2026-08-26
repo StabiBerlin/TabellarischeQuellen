@@ -8,6 +8,7 @@ extraction tools/methods.
 
 ```
 data/
+  eval100/          100 tables taken from different sources
   sbb/
     raw-tables/     Small selection of Source images of tables from the SBB dataset   
 tasks/               Instructions and code for specific workshop tasks
