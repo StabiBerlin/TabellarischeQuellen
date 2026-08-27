@@ -13,7 +13,7 @@ Du hast zwei Möglichkeiten, das Notebook zu starten:
 2. Öffne das Notebook direkt: [![Open in molab](https://molab.marimo.io/molab-shield.svg)](https://molab.marimo.io/notebooks/nb_56f2stoWk2eEh6oB97hYt3)
 3. Fertig — alles läuft im Browser
 
-### Option A: Marimo lokal (kein Account nötig)
+### Option B: Marimo lokal (kein Account nötig)
 
 
 1. **Python installieren** (empfohlen: Version 3.10 oder neuer)
