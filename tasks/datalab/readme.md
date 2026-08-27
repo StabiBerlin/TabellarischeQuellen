@@ -9,7 +9,7 @@ Du hast zwei Möglichkeiten, das Notebook zu starten:
 
 ### Option A: molab (empfohlen, kein lokales Python nötig)
 
-1. Erstelle einen kostenlosen Account auf [molab.io](https://molab.marimo.io)
+1. Erstelle einen kostenlosen Account auf [molab](https://molab.marimo.io)
 2. Öffne das Notebook direkt: [![Open in molab](https://molab.marimo.io/molab-shield.svg)](https://molab.marimo.io/notebooks/nb_56f2stoWk2eEh6oB97hYt3)
 3. Fertig — alles läuft im Browser
 
