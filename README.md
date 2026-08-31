@@ -10,7 +10,9 @@ extraction tools/methods.
 data/
   eval100/          100 tables taken from different sources
   sbb/
-    raw-tables/     Small selection of Source images of tables from the SBB dataset   
+    raw-tables/     Small selection of Source images of tables from the SBB dataset
+                    Full dataset at https://doi.org/10.5281/zenodo.22111083
+  NFDI_150_sample/  150 tables taken from BSB collection items   
 tasks/               Instructions and code for specific workshop tasks
 
 ```
