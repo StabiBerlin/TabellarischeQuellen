@@ -2,13 +2,14 @@
 # requires-python = ">=3.13"
 # dependencies = [
 #     "anywidget==0.11.0",
+#     "drawdata==0.5.2",
 #     "traitlets==5.15.1",
 # ]
 # ///
 
 import marimo
 
-__generated_with = "0.21.1"
+__generated_with = "0.24.0"
 app = marimo.App(width="medium", auto_download=["html"])
 
 
@@ -29,6 +30,7 @@ def _():
     import pandas as pd
     import cv2
     import numpy as np
+    import json
 
     return (
         BeautifulSoup,
@@ -99,6 +101,40 @@ def _(image_in, mo):
 
 
 @app.cell
+def _(mo):
+    mo.md("""
+    ### Bild zuschneiden / Tabelle ausschneiden
+    """)
+    return
+
+
+@app.cell
+def _(ImageCropWidget, base64, image_in, io, mo):
+    _buf = io.BytesIO()
+    image_in.save(_buf, format="PNG")          # PNG = lossless; use JPEG/quality=90 for large photos
+    image_src = "data:image/png;base64," + base64.b64encode(_buf.getvalue()).decode()
+
+    cropper = mo.ui.anywidget(ImageCropWidget(image_src=image_src))
+    cropper
+    return (cropper,)
+
+
+@app.cell
+def _(cropper, image_in, mo):
+    crop = cropper.value.get("crop")
+
+    if crop and crop.get("width") and crop.get("height"):
+        cropped_img = image_in.crop(
+            (crop["x"], crop["y"], crop["x"] + crop["width"], crop["y"] + crop["height"])
+        )
+    else:
+        cropped_img = image_in   # noch nichts ausgewählt → ganzes Bild
+
+    mo.image(cropped_img)
+    return (cropped_img,)
+
+
+@app.cell
 def _(best_angle, mo):
     degree_input = mo.ui.text(label="Drehen (Grad)", value="0")
     mo.vstack([
@@ -112,7 +148,7 @@ def _(best_angle, mo):
 
 
 @app.cell
-def _(Image, degree_input, image_in, mo):
+def _(Image, cropped_img, degree_input, mo, np):
     def parse_angle(raw: str) -> float:
         try:
             return float(raw.strip())
@@ -121,35 +157,32 @@ def _(Image, degree_input, image_in, mo):
 
     angle = parse_angle(degree_input.value)
 
-    def rotate_image(image_in, angle: float):
-        # Normalize to 0-360 range
+    def rotate_image(img, angle: float):
         angle = angle % 360
-
-        # Split into nearest 90° multiple (coarse) and the leftover (fine)
         coarse = round(angle / 90) * 90
         fine = angle - coarse
-        coarse = coarse % 360  # wrap 360 back to 0
+        coarse = coarse % 360
 
-        # Step 1: lossless coarse rotation via transpose
+        # Step 1: lossless coarse rotation (modern enum constants)
+        T = Image.Transpose
         if coarse == 90:
-            result = image_in.transpose(Image.ROTATE_270)
+            result = img.transpose(T.ROTATE_270)
         elif coarse == 180:
-            result = image_in.transpose(Image.ROTATE_180)
+            result = img.transpose(T.ROTATE_180)
         elif coarse == 270:
-            result = image_in.transpose(Image.ROTATE_90)
+            result = img.transpose(T.ROTATE_90)
         else:
-            result = image_in
+            result = img
 
-        # Step 2: fine correction via interpolated rotate
+        # Step 2: fine correction
         if fine != 0:
             result = result.rotate(-fine, resample=Image.BICUBIC, expand=False)
 
         return result
 
-    image = rotate_image(image_in, angle)
+    image = rotate_image(cropped_img, angle)   # <-- was image_in
 
-
-    mo.image(src=image)
+    mo.image(src=np.asarray(image))
     return (image,)
 
 
@@ -219,6 +252,7 @@ def _(BytesIO, image, mo, os, requests, run_button, time):
             "output_format": "json,html",
             "mode": "accurate",
             "extras": "table_cell_bboxes",
+            #"use_llm": "true",
             #"skip_cache": "true",
             #"word_bboxes": "true",
             #"add_block_ids": "true"
@@ -276,6 +310,12 @@ def _(image, resultJSON):
 
 
 @app.cell
+def _():
+    #resultJSON
+    return
+
+
+@app.cell
 def _(Image, base64, image, io, mo, resultHTML):
     styled_html = f"""
     <style>
@@ -317,26 +357,56 @@ def _(Image, base64, image, io, mo, resultHTML):
 
 
 @app.cell
-def _(mo, resultJSON):
-    tables = []
-    for page in resultJSON["children"]:
-        for element in page["children"]:
-            if element["block_type"] == "Table":
-                tables.append(element)
+def _(BeautifulSoup, mo, resultJSON):
+    def extract_tables(resultJSON):
+        tables = []
+        for page in resultJSON["children"]:
+            for element in page["children"]:
+                if element["block_type"] == "Table":
+                    tables.append(element)
+                elif element["block_type"] == "ListGroup":
+                    # Table wrapped in <ul><li>...</li></ul>
+                    soup = BeautifulSoup(element["html"], "html.parser")
+                    for table_tag in soup.find_all("table"):
+                        # Synthesize a table-like dict with the same shape
+                        # your downstream code expects
+                        tables.append({
+                            "block_type": "Table",
+                            "html": str(table_tag),
+                            "bbox": element["bbox"],
+                            "page": element["page"],
+                        })
+                elif element["block_type"] == "Text":
+                    # Table wrapped in <ul><li>...</li></ul>
+                    soup = BeautifulSoup(element["html"], "html.parser")
+                    for table_tag in soup.find_all("table"):
+                        # Synthesize a table-like dict with the same shape
+                        # your downstream code expects
+                        tables.append({
+                            "block_type": "Table",
+                            "html": str(table_tag),
+                            "bbox": element["bbox"],
+                            "page": element["page"],
+                        })
+        return tables
+
+    tables = extract_tables(resultJSON)
 
     table_options = {
         f"Tabelle {i + 1}": i
         for i in range(len(tables))
     }
 
-    selected_table_idx = mo.ui.dropdown(
-        options=table_options,
-        value="Tabelle 1",
-        label="Tabelle zur Bearbeitung auswählen",
-    )
+    if len(tables)>0:
+        selected_table_idx = mo.ui.dropdown(
+            options=table_options,
+            value="Tabelle 1",
+            label="Tabelle zur Bearbeitung auswählen",
+        )
+
 
     mo.vstack([mo.md(f"### Es wurde(n) {len(tables)} Tabelle(n) gefunden."),
-              selected_table_idx])
+              selected_table_idx]) if len(tables)>0 else mo.md(f"Es wurden keine Tabellen gefunden.")
     return selected_table_idx, tables
 
 
@@ -585,7 +655,7 @@ def _(
                 label="Nur die ausgewählte Tabelle herunterladen (Html)")
         ])
     ])
-
+  
     return
 
 
@@ -1777,6 +1847,87 @@ def _(anywidget, traitlets):
         """
 
     return (EditableHTMLTable,)
+
+
+@app.cell(hide_code=True)
+def _(anywidget, traitlets):
+    class ImageCropWidget(anywidget.AnyWidget):
+        _esm = """
+        function render({ model, el }) {
+          const overlay = document.createElement("div");
+          overlay.style.position = "relative";
+          overlay.style.display = "inline-block";
+
+          const img = document.createElement("img");
+          img.src = model.get("image_src");
+          img.style.maxWidth = "100%";
+          img.style.cursor = "crosshair";
+          img.draggable = false;
+          overlay.appendChild(img);
+
+          // keep the displayed image in sync if image_src changes
+          model.on("change:image_src", () => {
+            img.src = model.get("image_src");
+          });
+
+          let box = null;
+          let dragging = false;
+          let startX = 0, startY = 0;
+
+          img.addEventListener("mousedown", (e) => {
+            dragging = true;
+            startX = e.offsetX;
+            startY = e.offsetY;
+            if (box) box.remove();
+            box = document.createElement("div");
+            box.style.position = "absolute";
+            box.style.border = "2px solid red";
+            box.style.pointerEvents = "none";   // so offsetX stays relative to <img>
+            box.style.left = startX + "px";
+            box.style.top = startY + "px";
+            overlay.appendChild(box);
+            e.preventDefault();
+          });
+
+          window.addEventListener("mousemove", (e) => {
+            if (!dragging || !box) return;
+            const r = img.getBoundingClientRect();
+            const cx = Math.max(0, Math.min(e.clientX - r.left, r.width));
+            const cy = Math.max(0, Math.min(e.clientY - r.top, r.height));
+            box.style.left = Math.min(startX, cx) + "px";
+            box.style.top = Math.min(startY, cy) + "px";
+            box.style.width = Math.abs(cx - startX) + "px";
+            box.style.height = Math.abs(cy - startY) + "px";
+          });
+
+          window.addEventListener("mouseup", (e) => {
+            if (!dragging) return;
+            dragging = false;
+            const r = img.getBoundingClientRect();
+            const cx = Math.max(0, Math.min(e.clientX - r.left, r.width));
+            const cy = Math.max(0, Math.min(e.clientY - r.top, r.height));
+            // convert display px -> natural image px (img may be scaled by maxWidth)
+            const sx = img.naturalWidth / r.width;
+            const sy = img.naturalHeight / r.height;
+            model.set("crop", {
+              x: Math.round(Math.min(startX, cx) * sx),
+              y: Math.round(Math.min(startY, cy) * sy),
+              width: Math.round(Math.abs(cx - startX) * sx),
+              height: Math.round(Math.abs(cy - startY) * sy),
+            });
+            model.save_changes();   // sync back to Python only once, on release
+          });
+
+          el.appendChild(overlay);
+        }
+        export default { render };
+        """
+
+        image_src = traitlets.Unicode("").tag(sync=True)
+        crop = traitlets.Dict({}).tag(sync=True)
+
+
+    return (ImageCropWidget,)
 
 
 if __name__ == "__main__":
