@@ -96,7 +96,7 @@ def _(BytesIO, Image, file_area, mo, os):
 
 @app.cell
 def _(image_in, mo):
-    mo.image(src=image_in)
+    mo.image(src=image_in, width=600)
     return
 
 
@@ -130,7 +130,7 @@ def _(cropper, image_in, mo):
     else:
         cropped_img = image_in   # noch nichts ausgewählt → ganzes Bild
 
-    mo.image(cropped_img)
+    mo.image(cropped_img) if crop else None
     return (cropped_img,)
 
 
@@ -187,9 +187,9 @@ def _(Image, cropped_img, degree_input, mo, np):
 
 
 @app.cell
-def _(cv2, image_in, np):
+def _(cropped_img, cv2, np):
     def find_skew_by_projection(angle_range=3.0, step=0.1):
-        img = cv2.cvtColor(np.array(image_in), cv2.COLOR_RGB2BGR)
+        img = cv2.cvtColor(np.array(cropped_img), cv2.COLOR_RGB2BGR)
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
         thresh = cv2.threshold(gray, 0, 255,
@@ -525,7 +525,7 @@ def _(
     </div>
     """)
 
-    mo.hstack([left, structure_editor]) if cropped.width < 1500 else mo.vstack([
+    mo.hstack([left, structure_editor]) if cropped.width < 1000 else mo.vstack([
         mo.Html(f'<img src="{cropped_url}" style="width:100%;">'),
         structure_editor
     ])
@@ -576,7 +576,7 @@ def _(
     editor = mo.ui.anywidget(_raw_editor)
 
 
-    mo.hstack([left, editor]) if cropped.width < 1500 else mo.vstack([
+    mo.hstack([left, editor]) if cropped.width < 1000 else mo.vstack([
         mo.Html(f'<img src="{cropped_url}" style="width:100%;">'),
         editor
     ])
